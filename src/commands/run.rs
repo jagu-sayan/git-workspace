@@ -1,4 +1,5 @@
 use super::map_repositories;
+use crate::display::DisplayType;
 use crate::lockfile::Lockfile;
 use crate::repository::Repository;
 use std::path::Path;
@@ -6,6 +7,7 @@ use std::path::Path;
 /// Execute a command on all our repositories
 pub fn execute_cmd(
     workspace: &Path,
+    display: DisplayType,
     threads: usize,
     cmd: String,
     args: Vec<String>,
@@ -28,9 +30,15 @@ pub fn execute_cmd(
         repos_to_fetch.len()
     );
 
+    // Initialize display
+    let display = display.create_display();
+
     // Run fetch on them
-    map_repositories(&repos_to_fetch, threads, |r, progress_bar| {
-        r.execute_cmd(workspace, progress_bar, &cmd, &args)
-    })?;
+    map_repositories(
+        &repos_to_fetch,
+        threads,
+        |r| r.execute_cmd(workspace, display.clone(), &cmd, &args),
+        display.clone(),
+    )?;
     Ok(())
 }
