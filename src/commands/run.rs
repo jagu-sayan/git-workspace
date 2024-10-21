@@ -1,11 +1,14 @@
 use super::map_repositories;
+use crate::display::Display;
 use crate::lockfile::Lockfile;
 use crate::repository::Repository;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Execute a command on all our repositories
 pub fn execute_cmd(
     workspace: &Path,
+    display: Arc<dyn Display + Sync + Send>,
     threads: usize,
     cmd: String,
     args: Vec<String>,
@@ -29,8 +32,11 @@ pub fn execute_cmd(
     );
 
     // Run fetch on them
-    map_repositories(&repos_to_fetch, threads, |r, progress_bar| {
-        r.execute_cmd(workspace, progress_bar, &cmd, &args)
-    })?;
+    map_repositories(
+        &repos_to_fetch,
+        threads,
+        |r| r.execute_cmd(workspace, display.clone(), &cmd, &args),
+        display.clone(),
+    )?;
     Ok(())
 }

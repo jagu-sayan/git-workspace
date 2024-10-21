@@ -13,14 +13,16 @@ extern crate ureq;
 extern crate walkdir;
 
 use config::ProviderSource;
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
 use anyhow::Context;
 
 mod commands;
 mod config;
+mod display;
 mod lockfile;
+mod processor;
 mod providers;
 mod repository;
 mod utils;
@@ -28,6 +30,7 @@ mod utils;
 use commands::{
     add_provider_to_config, archive, execute_cmd, fetch, list, lock, pull_all_repositories, update,
 };
+use display::{Display, ProgressBarDisplay, TableDisplay};
 
 #[derive(StructOpt)]
 #[structopt(name = "git-workspace", author, about)]
@@ -41,6 +44,37 @@ struct Args {
     workspace: PathBuf,
     #[structopt(subcommand)]
     command: Command,
+    #[structopt(long, default_value = "progress")]
+    display: DisplayType,
+}
+
+#[derive(StructOpt)]
+pub enum DisplayType {
+    /// Display a progress bar
+    ProgressBar,
+    /// Display a table
+    Table,
+}
+
+impl DisplayType {
+    pub fn create_display(self) -> Arc<dyn Display + Sync + Send> {
+        match self {
+            DisplayType::ProgressBar => Arc::new(ProgressBarDisplay::new()),
+            DisplayType::Table => Arc::new(TableDisplay::new()),
+        }
+    }
+}
+
+impl FromStr for DisplayType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "progress" => Ok(DisplayType::ProgressBar),
+            "table" => Ok(DisplayType::Table),
+            _ => Err(format!("Invalid display type: {}", s)),
+        }
+    }
 }
 
 #[derive(StructOpt)]
@@ -144,25 +178,30 @@ fn handle_main(args: Args) -> anyhow::Result<()> {
         )
     })?;
 
+    // Initialize display
+    let display = args.display.create_display();
+
     // Run our sub command. Pretty self-explanatory.
     match args.command {
         Command::List { full } => list(&workspace_path, full)?,
         Command::Update { threads } => {
             lock(&workspace_path)?;
-            update(&workspace_path, threads)?
+            update(&workspace_path, display, threads)?
         }
         Command::Lock {} => {
             lock(&workspace_path)?;
         }
         Command::Archive { force } => archive(&workspace_path, force)?,
-        Command::Fetch { threads } => fetch(&workspace_path, threads)?,
+        Command::Fetch { threads } => fetch(&workspace_path, display, threads)?,
         Command::Add { file, command } => add_provider_to_config(&workspace_path, command, &file)?,
         Command::Run {
             threads,
             command,
             args,
-        } => execute_cmd(&workspace_path, threads, command, args)?,
-        Command::SwitchAndPull { threads } => pull_all_repositories(&workspace_path, threads)?,
+        } => execute_cmd(&workspace_path, display, threads, command, args)?,
+        Command::SwitchAndPull { threads } => {
+            pull_all_repositories(&workspace_path, display, threads)?
+        }
     };
     Ok(())
 }
