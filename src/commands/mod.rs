@@ -16,83 +16,35 @@ pub use run::execute_cmd;
 pub use switch_and_pull::pull_all_repositories;
 pub use update::update;
 
+use crate::display::Display;
+use crate::processor::RepositoryProcessor;
 use crate::repository::Repository;
-use anyhow::{anyhow, Context};
-use atomic_counter::{AtomicCounter, RelaxedCounter};
-use indicatif::{MultiProgress, ParallelProgressIterator, ProgressBar, ProgressStyle};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use anyhow::{anyhow, Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 use walkdir::WalkDir;
 
-/// Take any number of repositories and apply `f` on each one.
-/// This method takes care of displaying progress bars and displaying
-/// any errors that may arise.
-pub fn map_repositories<F>(repositories: &[Repository], threads: usize, f: F) -> anyhow::Result<()>
+/// Take any number of repositories and apply `f` on each one on multiple threads.
+/// This method takes care of displaying result and any errors that may arise.
+pub fn map_repositories<F>(
+    repositories: &[Repository],
+    threads: usize,
+    f: F,
+    display: Arc<dyn Display + Send + Sync>,
+) -> Result<()>
 where
-    F: Fn(&Repository, &ProgressBar) -> anyhow::Result<()> + std::marker::Sync,
+    F: Fn(&Repository) -> Result<()> + Send + Sync,
 {
-    // Create our progress bar. We use Arc here as we need to share the MultiProgress across
-    // more than 1 thread (described below)
-    let progress = Arc::new(MultiProgress::new());
-    // Create our total progress bar used with `.progress_iter()`.
-    let total_bar = progress.add(ProgressBar::new(repositories.len() as u64));
-    total_bar.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {percent}% [{wide_bar:.cyan/blue}] {pos}/{len} (ETA: {eta_precise})").expect("Invalid template")
-            .progress_chars("#>-"),
-    );
-
-    // user_attended() means a tty is attached to the output.
-    let is_attended = console::user_attended();
-    let total_repositories = repositories.len();
-    // Use a counter here if there is no tty, to show a stream of progress messages rather than
-    // a dynamic progress bar.
-    let counter = RelaxedCounter::new(1);
-
-    // Create our thread pool. We do this rather than use `.par_iter()` on any iterable as it
-    // allows us to customize the number of threads.
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(threads)
-        .build()
-        .with_context(|| "Error creating the thread pool")?;
-
-    // pool.install means that `.par_iter()` will use the thread pool we've built above.
-    let errors: Vec<(&Repository, anyhow::Error)> = pool.install(|| {
-        repositories
-            .par_iter()
-            // Update our progress bar with each iteration
-            .map(|repo| {
-                // Create a progress bar and configure some defaults
-                let progress_bar = progress.add(ProgressBar::new_spinner());
-                progress_bar.set_message("waiting...");
-                progress_bar.enable_steady_tick(Duration::from_millis(500));
-                // Increment our counter for use if the console is not a tty.
-                let idx = counter.inc();
-                if !is_attended {
-                    println!("[{}/{}] Starting {}", idx, total_repositories, repo.name());
-                }
-                // Run our given function. If the result is an error then attach the
-                // erroring Repository object to it.
-                let result = match f(repo, &progress_bar) {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err((repo, e)),
-                };
-                if !is_attended {
-                    println!("[{}/{}] Finished {}", idx, total_repositories, repo.name());
-                }
-                // Clear the progress bar and return the result
-                progress_bar.finish_and_clear();
-                result
-            })
-            .progress_with(total_bar)
-            // We only care about errors here, so filter them out.
-            .filter_map(Result::err)
-            // Collect the results into a Vec
-            .collect()
-    });
+    display.init(repositories.len() as u64)?;
+    let processor = RepositoryProcessor::new(threads);
+    let errors = processor.process(repositories, |repo| {
+        display.create_step(repo)?;
+        let result = f(repo);
+        display.finish_step(repo)?;
+        result
+    })?;
+    display.finish()?;
 
     // Print out each repository that failed to run.
     if !errors.is_empty() {
@@ -104,6 +56,14 @@ where
                 .for_each(|cause| eprintln!("because: {}", cause));
         }
     }
+    // Handle and display errors
+    // let errors: Vec<_> = results.into_iter().filter_map(Result::err).collect();
+    // if !errors.is_empty() {
+    //     eprintln!("{} repositories failed:", errors.len());
+    //     for error in errors {
+    //         eprintln!("Error: {}", error);
+    //     }
+    // }
 
     Ok(())
 }

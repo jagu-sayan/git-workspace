@@ -24,6 +24,7 @@ indicatif = { version = "0.17.9", features = ["rayon"] }
 console = { version = "0.15.10", features = [
     "ansi-parsing",
 ], default-features = false } # We don't care about unicode widths
+comfy-table = "6.1.0"
 atomic-counter = "1.0.1"
 ureq = { version = "2.12.1", features = ["json", "native-certs", "brotli"] }
 serde_json = "1.0.135"

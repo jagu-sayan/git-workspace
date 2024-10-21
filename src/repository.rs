@@ -1,12 +1,13 @@
+use crate::display::Display;
 use anyhow::{anyhow, Context};
 use console::{strip_ansi_codes, truncate_str};
 use git2::build::CheckoutBuilder;
 use git2::{Repository as Git2Repository, StatusOptions};
-use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 // Eq, Ord and friends are needed to order the list of repositories
 #[derive(Deserialize, Serialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -84,9 +85,9 @@ impl Repository {
     fn run_with_progress(
         &self,
         command: &mut Command,
-        progress_bar: &ProgressBar,
+        display: Arc<dyn Display + Sync + Send>,
     ) -> anyhow::Result<()> {
-        progress_bar.set_message(format!("{}: starting", self.name()));
+        display.set_message(format!("{}: starting", self.name()))?;
         let mut spawned = command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -95,7 +96,7 @@ impl Repository {
             .with_context(|| format!("Error starting command {:?}", command))?;
 
         let mut last_line = format!("{}: running...", self.name());
-        progress_bar.set_message(last_line.clone());
+        display.set_message(last_line.clone())?;
 
         if let Some(ref mut stderr) = spawned.stderr {
             let lines = BufReader::new(stderr).split(b'\r');
@@ -107,7 +108,7 @@ impl Repository {
                 let line = std::str::from_utf8(&output).unwrap();
                 let plain_line = strip_ansi_codes(line).replace('\n', " ");
                 let truncated_line = truncate_str(plain_line.trim(), 70, "...");
-                progress_bar.set_message(format!("{}: {}", self.name(), truncated_line));
+                display.set_message(format!("{}: {}", self.name(), truncated_line))?;
                 last_line = plain_line;
             }
         }
@@ -127,14 +128,14 @@ impl Repository {
     pub fn execute_cmd(
         &self,
         root: &Path,
-        progress_bar: &ProgressBar,
+        display: Arc<dyn Display + Sync + Send>,
         cmd: &str,
         args: &[String],
     ) -> anyhow::Result<()> {
         let mut command = Command::new(cmd);
         let child = command.args(args).current_dir(root.join(self.name()));
 
-        self.run_with_progress(child, progress_bar)
+        self.run_with_progress(child, display)
             .with_context(|| format!("Error running command in repo {}", self.name()))?;
 
         Ok(())
@@ -160,7 +161,11 @@ impl Repository {
         Ok(())
     }
 
-    pub fn clone(&self, root: &Path, progress_bar: &ProgressBar) -> anyhow::Result<()> {
+    pub fn clone(
+        &self,
+        root: &Path,
+        display: Arc<dyn Display + Sync + Send>,
+    ) -> anyhow::Result<()> {
         let mut command = Command::new("git");
 
         let child = command
@@ -170,10 +175,9 @@ impl Repository {
             .arg(&self.url)
             .arg(root.join(self.name()));
 
-        self.run_with_progress(child, progress_bar)
-            .with_context(|| {
-                format!("Error cloning repo into {} from {}", self.name(), &self.url)
-            })?;
+        self.run_with_progress(child, display).with_context(|| {
+            format!("Error cloning repo into {} from {}", self.name(), &self.url)
+        })?;
 
         Ok(())
     }

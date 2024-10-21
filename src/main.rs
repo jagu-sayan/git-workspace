@@ -3,6 +3,7 @@ use git_workspace::commands::{
     add_provider_to_config, archive, execute_cmd, fetch, list, lock, pull_all_repositories, update,
 };
 use git_workspace::config::ProviderSource;
+use git_workspace::display::DisplayType;
 use git_workspace::utils::{ensure_workspace_dir_exists, expand_workspace_path};
 use std::path::PathBuf;
 
@@ -21,11 +22,17 @@ enum Command {
     Update {
         #[arg(short = 't', long = "threads", default_value = "8")]
         threads: usize,
+        #[structopt(short, long, default_value = "progress")]
+        /// Choose between three different outputs: progress, table, simple
+        display: DisplayType,
     },
     /// Fetch new commits for all repositories in the workspace
     Fetch {
         #[arg(short = 't', long = "threads", default_value = "8")]
         threads: usize,
+        #[structopt(short, long, default_value = "progress")]
+        /// Choose between three different outputs: progress, table, simple
+        display: DisplayType,
     },
     /// Fetch all repositories from configured providers and write the lockfile
     Lock {},
@@ -33,6 +40,9 @@ enum Command {
     SwitchAndPull {
         #[arg(short = 't', long = "threads", default_value = "8")]
         threads: usize,
+        #[structopt(short, long, default_value = "progress")]
+        /// Choose between three different outputs: progress, table, simple
+        display: DisplayType,
     },
     /// List all repositories in the workspace
     ///
@@ -58,6 +68,9 @@ enum Command {
         threads: usize,
         #[arg(required = true)]
         command: String,
+        #[structopt(short, long, default_value = "progress")]
+        /// Choose between three different outputs: progress, table, simple
+        display: DisplayType,
         args: Vec<String>,
     },
     /// Add a provider to the configuration
@@ -82,22 +95,25 @@ fn handle_main(args: Args) -> anyhow::Result<()> {
     // Run our sub command. Pretty self-explanatory.
     match args.command {
         Command::List { full } => list(&workspace_path, full)?,
-        Command::Update { threads } => {
+        Command::Update { threads, display } => {
             lock(&workspace_path)?;
-            update(&workspace_path, threads)?
+            update(&workspace_path, display, threads)?
         }
         Command::Lock {} => {
             lock(&workspace_path)?;
         }
         Command::Archive { force } => archive(&workspace_path, force)?,
-        Command::Fetch { threads } => fetch(&workspace_path, threads)?,
+        Command::Fetch { threads, display } => fetch(&workspace_path, display, threads)?,
         Command::Add { file, command } => add_provider_to_config(&workspace_path, command, &file)?,
         Command::Run {
             threads,
             command,
+            display,
             args,
-        } => execute_cmd(&workspace_path, threads, command, args)?,
-        Command::SwitchAndPull { threads } => pull_all_repositories(&workspace_path, threads)?,
+        } => execute_cmd(&workspace_path, display, threads, command, args)?,
+        Command::SwitchAndPull { threads, display } => {
+            pull_all_repositories(&workspace_path, display, threads)?
+        }
     };
     Ok(())
 }
