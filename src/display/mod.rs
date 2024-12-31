@@ -4,9 +4,11 @@ use std::{str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
 mod progress_bar;
+mod simple;
 mod table;
 
 pub use progress_bar::ProgressBarDisplay;
+pub use simple::SimpleDisplay;
 pub use table::TableDisplay;
 
 pub trait Display {
@@ -20,6 +22,7 @@ pub trait Display {
 #[derive(StructOpt)]
 pub enum DisplayType {
     ProgressBar,
+    Simple,
     Table,
 }
 
@@ -27,6 +30,7 @@ impl DisplayType {
     pub fn create_display(self) -> Arc<dyn Display + Sync + Send> {
         match self {
             DisplayType::ProgressBar => Arc::new(ProgressBarDisplay::new()),
+            DisplayType::Simple => Arc::new(SimpleDisplay::new()),
             DisplayType::Table => Arc::new(TableDisplay::new()),
         }
     }

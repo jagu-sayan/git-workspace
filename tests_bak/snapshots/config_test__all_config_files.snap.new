@@ -1,0 +1,10 @@
+---
+source: tests/config_test.rs
+assertion_line: 56
+expression: file_names
+snapshot_kind: text
+---
+[
+    "workspace-dev.toml",
+    "workspace.toml",
+]

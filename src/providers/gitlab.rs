@@ -120,6 +120,28 @@ impl fmt::Display for GitlabProvider {
     }
 }
 
+impl GitlabProvider {
+    pub fn new(
+        name: String,
+        path: String,
+        env_var: String,
+        include: Vec<String>,
+        exclude: Vec<String>,
+        auth_http: bool,
+        url: String,
+    ) -> Self {
+        GitlabProvider {
+            name,
+            path,
+            env_var,
+            auth_http,
+            include,
+            exclude,
+            url,
+        }
+    }
+}
+
 impl Provider for GitlabProvider {
     fn correctly_configured(&self) -> bool {
         let token = env::var(&self.env_var);

@@ -89,6 +89,28 @@ impl fmt::Display for GithubProvider {
 }
 
 impl GithubProvider {
+    pub fn new(
+        name: String,
+        path: String,
+        env_var: String,
+        skip_forks: bool,
+        include: Vec<String>,
+        exclude: Vec<String>,
+        auth_http: bool,
+        url: String,
+    ) -> Self {
+        GithubProvider {
+            name,
+            path,
+            env_var,
+            skip_forks,
+            auth_http,
+            include,
+            exclude,
+            url,
+        }
+    }
+
     fn parse_repo(
         &self,
         path: &str,

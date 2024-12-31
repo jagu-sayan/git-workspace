@@ -1,0 +1,24 @@
+{
+    "data": {
+        "repositoryOwner": {
+            "repositories": {
+                "nodes": [
+                    {
+                        "nameWithOwner": "test-user/repo1",
+                        "url": "https://github.com/test-user/repo1",
+                        "sshUrl": "git@github.com:test-user/repo1.git",
+                        "isArchived": false,
+                        "defaultBranchRef": {
+                            "name": "main"
+                        },
+                        "parent": null
+                    }
+                ],
+                "pageInfo": {
+                    "hasNextPage": false,
+                    "endCursor": null
+                }
+            }
+        }
+    }
+}

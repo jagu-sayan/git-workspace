@@ -1,36 +1,11 @@
-extern crate atomic_counter;
-extern crate console;
-#[cfg(unix)]
-extern crate expanduser;
-extern crate fs_extra;
-extern crate graphql_client;
-extern crate indicatif;
-extern crate serde;
-#[macro_use]
-extern crate serde_json;
-extern crate structopt;
-extern crate ureq;
-extern crate walkdir;
-
-use config::ProviderSource;
-use std::path::PathBuf;
-use structopt::StructOpt;
-
 use anyhow::Context;
-
-mod commands;
-mod config;
-mod display;
-mod lockfile;
-mod processor;
-mod providers;
-mod repository;
-mod utils;
-
-use commands::{
+use git_workspace::commands::{
     add_provider_to_config, archive, execute_cmd, fetch, list, lock, pull_all_repositories, update,
 };
-use display::DisplayType;
+use git_workspace::config::ProviderSource;
+use git_workspace::display::DisplayType;
+use std::path::PathBuf;
+use structopt::StructOpt;
 
 #[derive(StructOpt)]
 #[structopt(name = "git-workspace", author, about)]
