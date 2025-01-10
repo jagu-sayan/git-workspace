@@ -1,8 +1,6 @@
-use crate::providers::{GiteaProvider, GithubProvider, GitlabProvider, Provider};
-use crate::repository::Repository;
+use crate::providers::ProviderSource;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -75,42 +73,10 @@ impl Config {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Eq, Ord, PartialEq, PartialOrd)]
-#[serde(tag = "provider")]
-#[serde(rename_all = "lowercase")]
-#[derive(clap::Subcommand)]
-pub enum ProviderSource {
-    Gitea(GiteaProvider),
-    Gitlab(GitlabProvider),
-    Github(GithubProvider),
-}
-
-impl ProviderSource {
-    pub fn provider(&self) -> &dyn Provider {
-        match self {
-            Self::Gitea(config) => config,
-            Self::Gitlab(config) => config,
-            Self::Github(config) => config,
-        }
-    }
-
-    pub fn correctly_configured(&self) -> bool {
-        self.provider().correctly_configured()
-    }
-
-    pub fn fetch_repositories(&self) -> anyhow::Result<Vec<Repository>> {
-        self.provider().fetch_repositories()
-    }
-}
-
-impl fmt::Display for ProviderSource {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.provider())
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::providers::{GithubProvider, GitlabProvider};
+
     use super::*;
     use std::fs::File;
     use std::io::Write;

@@ -2,7 +2,7 @@ use clap::Parser;
 use git_workspace::commands::{
     add_provider_to_config, archive, execute_cmd, fetch, list, lock, pull_all_repositories, update,
 };
-use git_workspace::config::ProviderSource;
+use git_workspace::providers::ProviderSource;
 use git_workspace::utils::{ensure_workspace_dir_exists, expand_workspace_path};
 use std::path::PathBuf;
 

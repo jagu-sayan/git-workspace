@@ -1,4 +1,4 @@
-use crate::config::{Config, ProviderSource};
+use crate::{config::Config, providers::ProviderSource};
 use anyhow::{anyhow, Context};
 use console::style;
 use std::path::Path;
