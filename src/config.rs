@@ -1,3 +1,4 @@
+use crate::group::GroupConfig;
 use crate::providers::ProviderSource;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -5,9 +6,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Serialize, Debug)]
-struct ConfigContents {
+pub struct ConfigContents {
     #[serde(rename = "provider", default)]
     providers: Vec<ProviderSource>,
+    #[serde(rename = "group", default)]
+    groups: Vec<GroupConfig>,
+}
+
+impl ConfigContents {
+    pub fn new(providers: Vec<ProviderSource>, groups: Vec<GroupConfig>) -> Self {
+        Self { providers, groups }
+    }
 }
 
 pub struct Config {
@@ -50,8 +59,8 @@ impl Config {
         Ok(Self::new(config_files))
     }
 
-    pub fn read(&self) -> anyhow::Result<Vec<ProviderSource>> {
-        let mut all_providers = vec![];
+    pub fn read(&self) -> anyhow::Result<Vec<ConfigContents>> {
+        let mut config = vec![];
 
         for path in &self.files {
             if !path.exists() {
@@ -61,12 +70,25 @@ impl Config {
                 .with_context(|| format!("Cannot read file {}", path.display()))?;
             let contents: ConfigContents = toml::from_str(file_contents.as_str())
                 .with_context(|| format!("Error parsing TOML in file {}", path.display()))?;
-            all_providers.extend(contents.providers);
+            config.push(contents);
         }
+        Ok(config)
+    }
+
+    pub fn read_providers(&self) -> anyhow::Result<Vec<ProviderSource>> {
+        let config = self.read()?;
+        let all_providers = config.into_iter().flat_map(|c| c.providers).collect();
         Ok(all_providers)
     }
-    pub fn write(&self, providers: Vec<ProviderSource>, config_path: &Path) -> anyhow::Result<()> {
-        let toml = toml::to_string(&ConfigContents { providers })?;
+
+    pub fn read_groups(&self) -> anyhow::Result<Vec<GroupConfig>> {
+        let config = self.read()?;
+        let all_groups = config.into_iter().flat_map(|c| c.groups).collect();
+        Ok(all_groups)
+    }
+
+    pub fn write(&self, content: &ConfigContents, config_path: &Path) -> anyhow::Result<()> {
+        let toml = toml::to_string(content)?;
         fs::write(config_path, toml)
             .with_context(|| format!("Error writing to file {}", config_path.display()))?;
         Ok(())
@@ -151,7 +173,7 @@ mod tests {
         create_test_config(dir_path, "workspace-42.toml", WORKSPACE_FILE_CONTENT);
 
         let config = Config::from_workspace(dir_path).unwrap();
-        let providers = config.read().unwrap();
+        let providers = config.read_providers().unwrap();
 
         assert_eq!(providers.len(), 4);
         match &providers[0] {
@@ -174,7 +196,8 @@ mod tests {
             ProviderSource::Gitlab(GitlabProvider::default()),
         ];
         let config = Config::new(vec![config_path.clone()]);
-        config.write(providers, &config_path).unwrap();
+        let content = ConfigContents::new(providers, vec![]);
+        config.write(&content, &config_path).unwrap();
 
         let content = fs::read_to_string(&config_path).unwrap();
         assert!(content.contains("github"));

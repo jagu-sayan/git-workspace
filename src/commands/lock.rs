@@ -13,7 +13,7 @@ pub fn lock(workspace: &Path) -> anyhow::Result<()> {
 
     // Read the configuration sources
     let sources = config
-        .read()
+        .read_providers()
         .with_context(|| "Error reading config files")?;
 
     let total_bar = ProgressBar::new(sources.len() as u64);
@@ -40,6 +40,9 @@ pub fn lock(workspace: &Path) -> anyhow::Result<()> {
     // We may have duplicated repositories here. Make sure they are unique based on the full path.
     all_repositories.sort();
     all_repositories.dedup();
+
+    // Create all virtual groups
+
     // Write the lockfile out
     let lockfile = Lockfile::new(workspace.join("workspace-lock.toml"));
     lockfile.write(&all_repositories)?;

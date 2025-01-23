@@ -2,6 +2,9 @@ use clap::Parser;
 use git_workspace::commands::{
     add_provider_to_config, archive, execute_cmd, fetch, list, lock, pull_all_repositories, update,
 };
+use git_workspace::group::{
+    add_group_to_config, list_groups, remove_group_from_config, GroupCommand,
+};
 use git_workspace::providers::ProviderSource;
 use git_workspace::utils::{ensure_workspace_dir_exists, expand_workspace_path};
 use std::path::PathBuf;
@@ -67,6 +70,13 @@ enum Command {
         #[command(subcommand)]
         command: ProviderSource,
     },
+    /// Add or remove groups
+    Group {
+        #[arg(long = "file", default_value = "workspace.toml")]
+        file: PathBuf,
+        #[command(subcommand)]
+        command: GroupCommand,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -98,6 +108,11 @@ fn handle_main(args: Args) -> anyhow::Result<()> {
             args,
         } => execute_cmd(&workspace_path, threads, command, args)?,
         Command::SwitchAndPull { threads } => pull_all_repositories(&workspace_path, threads)?,
+        Command::Group { file, command } => match command {
+            GroupCommand::Add(group) => add_group_to_config(&workspace_path, group, &file)?,
+            GroupCommand::Remove { name } => remove_group_from_config(&name, &file)?,
+            GroupCommand::List => list_groups()?,
+        },
     };
     Ok(())
 }

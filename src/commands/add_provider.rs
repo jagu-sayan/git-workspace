@@ -1,4 +1,7 @@
-use crate::{config::Config, providers::ProviderSource};
+use crate::{
+    config::{Config, ConfigContents},
+    providers::ProviderSource,
+};
 use anyhow::{anyhow, Context};
 use console::style;
 use std::path::Path;
@@ -15,7 +18,9 @@ pub fn add_provider_to_config(
     let path_to_config = workspace.join(file);
     // Load and parse our configuration files
     let config = Config::new(vec![path_to_config]);
-    let mut sources = config.read().with_context(|| "Error reading config file")?;
+    let mut sources = config
+        .read_providers()
+        .with_context(|| "Error reading config file")?;
     // Ensure we don't add duplicates:
     if sources.iter().any(|s| s == &provider_source) {
         println!("Entry already exists, skipping");
@@ -27,8 +32,9 @@ pub fn add_provider_to_config(
         );
         // Push the provider into the source and write it to the configuration file
         sources.push(provider_source);
+        let content = ConfigContents::new(sources, vec![]);
         config
-            .write(sources, &workspace.join(file))
+            .write(&content, &workspace.join(file))
             .with_context(|| "Error writing config file")?;
     }
     Ok(())

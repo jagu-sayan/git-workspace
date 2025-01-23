@@ -13,6 +13,7 @@ extern crate walkdir;
 
 pub mod commands;
 pub mod config;
+pub mod group;
 pub mod lockfile;
 pub mod providers;
 pub mod repository;

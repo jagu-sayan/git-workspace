@@ -1,3 +1,4 @@
+use crate::group::Group;
 use crate::repository::Repository;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,8 @@ pub struct Lockfile {
 struct LockfileContents {
     #[serde(rename = "repo")]
     repos: Vec<Repository>,
+    #[serde(rename = "group")]
+    groups: Group,
 }
 
 impl Lockfile {
