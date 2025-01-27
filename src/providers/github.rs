@@ -1,3 +1,4 @@
+use crate::processing::Identifiable;
 use crate::providers::{
     create_exclude_regex_set, create_include_regex_set, Provider, APP_USER_AGENT,
 };
@@ -33,7 +34,9 @@ fn public_github_url() -> String {
     DEFAULT_GITHUB_URL.to_string()
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Eq, Ord, PartialEq, PartialOrd, clap::Parser)]
+#[derive(
+    Deserialize, Serialize, Default, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, clap::Parser,
+)]
 #[serde(rename_all = "lowercase")]
 #[command(about = "Add a Github user or organization by name")]
 pub struct GithubProvider {
@@ -110,6 +113,12 @@ impl GithubProvider {
             default_branch,
             upstream,
         )
+    }
+}
+
+impl Identifiable for GithubProvider {
+    fn name(&self) -> String {
+        "Github provider".to_string()
     }
 }
 

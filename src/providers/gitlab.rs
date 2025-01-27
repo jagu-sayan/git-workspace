@@ -1,3 +1,4 @@
+use crate::processing::Identifiable;
 use crate::providers::{
     create_exclude_regex_set, create_include_regex_set, Provider, APP_USER_AGENT,
 };
@@ -66,7 +67,9 @@ fn default_env_var() -> String {
     String::from("GITHUB_TOKEN")
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Eq, Ord, PartialEq, PartialOrd, clap::Parser)]
+#[derive(
+    Deserialize, Serialize, Default, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, clap::Parser,
+)]
 #[serde(rename_all = "lowercase")]
 #[command(about = "Add a Gitlab user or group by name")]
 pub struct GitlabProvider {
@@ -118,6 +121,12 @@ impl fmt::Display for GitlabProvider {
             style(&self.path).green(),
             style(&self.env_var).green(),
         )
+    }
+}
+
+impl Identifiable for GitlabProvider {
+    fn name(&self) -> String {
+        "Gitlab provider".to_string()
     }
 }
 

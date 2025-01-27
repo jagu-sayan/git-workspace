@@ -12,19 +12,9 @@ pub fn pull_all_repositories(workspace: &Path, threads: usize) -> anyhow::Result
         repositories.len()
     );
 
-    map_repositories(&repositories, threads, |r, progress_bar| {
+    map_repositories(&repositories, threads, |r, _| {
         r.switch_to_primary_branch(workspace)?;
-        let pull_args = match (&r.upstream, &r.branch) {
-            // This fucking sucks, but it's because my abstractions suck ass.
-            // I need to learn how to fix this.
-            (Some(_), Some(branch)) => vec![
-                "pull".to_string(),
-                "upstream".to_string(),
-                branch.to_string(),
-            ],
-            _ => vec!["pull".to_string()],
-        };
-        r.execute_cmd(workspace, progress_bar, "git", &pull_args)?;
+        r.pull(workspace)?;
         Ok(())
     })?;
 
