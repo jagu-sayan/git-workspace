@@ -1,3 +1,4 @@
+use crate::processing::Identifiable;
 use crate::providers::{GiteaProvider, GithubProvider, GitlabProvider, Provider};
 use crate::repository::Repository;
 use anyhow::Context;
@@ -75,7 +76,7 @@ impl Config {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Deserialize, Serialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(tag = "provider")]
 #[serde(rename_all = "lowercase")]
 #[derive(clap::Subcommand)]
@@ -100,6 +101,16 @@ impl ProviderSource {
 
     pub fn fetch_repositories(&self) -> anyhow::Result<Vec<Repository>> {
         self.provider().fetch_repositories()
+    }
+}
+
+impl Identifiable for ProviderSource {
+    fn name(&self) -> String {
+        match self {
+            Self::Gitea(config) => config.name(),
+            Self::Gitlab(config) => config.name(),
+            Self::Github(config) => config.name(),
+        }
     }
 }
 

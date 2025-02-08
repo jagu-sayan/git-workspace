@@ -1,12 +1,33 @@
-use anyhow::{anyhow, Context};
-use console::{strip_ansi_codes, truncate_str};
+use crate::display::DisplayableResult;
+use crate::processing::Identifiable;
+use anyhow::{Context, Result};
 use git2::build::CheckoutBuilder;
 use git2::{Repository as Git2Repository, StatusOptions};
-use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+#[derive(Serialize)]
+pub struct GitCommandResult {
+    pub repo: Repository,
+    pub success: bool,
+    pub output: String,
+    pub error: Option<String>,
+}
+
+impl DisplayableResult for GitCommandResult {
+    fn is_success(&self) -> bool {
+        self.success
+    }
+
+    // fn get_name(&self) -> &str {
+    //     &self.name
+    // }
+
+    // fn get_message(&self) -> &str {
+    //     self.output.as_str()
+    // }
+}
 
 // Eq, Ord and friends are needed to order the list of repositories
 #[derive(Deserialize, Serialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -41,10 +62,17 @@ impl Repository {
         }
     }
 
-    pub fn set_upstream(&self, root: &Path) -> anyhow::Result<()> {
+    pub fn set_upstream(&self, root: &Path) -> Result<GitCommandResult> {
         let upstream = match &self.upstream {
             Some(upstream) => upstream,
-            None => return Ok(()),
+            None => {
+                return Ok(GitCommandResult {
+                    repo: self.to_owned(),
+                    success: true,
+                    output: "No upstream configured".to_string(),
+                    error: None,
+                })
+            }
         };
 
         let mut command = Command::new("git");
@@ -72,120 +100,130 @@ impl Repository {
         if !output.status.success() {
             let stderr =
                 std::str::from_utf8(&output.stderr).with_context(|| "Error decoding git output")?;
-            return Err(anyhow!(
-                "Failed to set upstream on repo {}: {}",
-                root.display(),
-                stderr.trim()
-            ));
+            return Ok(GitCommandResult {
+                repo: self.to_owned(),
+                success: false,
+                output: String::new(),
+                error: Some(format!("Failed to set upstream: {}", stderr.trim())),
+            });
         }
-        Ok(())
+
+        Ok(GitCommandResult {
+            repo: self.to_owned(),
+            success: true,
+            output: "Upstream configured successfully".to_string(),
+            error: None,
+        })
     }
 
-    fn run_with_progress(
-        &self,
-        command: &mut Command,
-        progress_bar: &ProgressBar,
-    ) -> anyhow::Result<()> {
-        progress_bar.set_message(format!("{}: starting", self.name()));
-        let mut spawned = command
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .with_context(|| format!("Error starting command {:?}", command))?;
-
-        let mut last_line = format!("{}: running...", self.name());
-        progress_bar.set_message(last_line.clone());
-
-        if let Some(ref mut stderr) = spawned.stderr {
-            let lines = BufReader::new(stderr).split(b'\r');
-            for line in lines {
-                let output = line.unwrap();
-                if output.is_empty() {
-                    continue;
-                }
-                let line = std::str::from_utf8(&output).unwrap();
-                let plain_line = strip_ansi_codes(line).replace('\n', " ");
-                let truncated_line = truncate_str(plain_line.trim(), 70, "...");
-                progress_bar.set_message(format!("{}: {}", self.name(), truncated_line));
-                last_line = plain_line;
-            }
-        }
-        let exit_code = spawned
-            .wait()
-            .context("Error waiting for process to finish")?;
-        if !exit_code.success() {
-            return Err(anyhow!(
-                "Git exited with code {}: {}",
-                exit_code.code().unwrap(),
-                last_line
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn execute_cmd(
-        &self,
-        root: &Path,
-        progress_bar: &ProgressBar,
-        cmd: &str,
-        args: &[String],
-    ) -> anyhow::Result<()> {
+    pub fn execute_cmd(&self, root: &Path, cmd: &str, args: &[String]) -> Result<GitCommandResult> {
         let mut command = Command::new(cmd);
-        let child = command.args(args).current_dir(root.join(self.name()));
+        command
+            .args(args)
+            .current_dir(root.join(self.name()))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
-        self.run_with_progress(child, progress_bar)
-            .with_context(|| format!("Error running command in repo {}", self.name()))?;
+        let output = command
+            .output()
+            .with_context(|| format!("Failed to execute command '{}' with args {:?}", cmd, args))?;
 
-        Ok(())
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Ok(GitCommandResult {
+                repo: self.to_owned(),
+                success: false,
+                output: String::new(),
+                error: Some(stderr.to_string()),
+            });
+        }
+
+        Ok(GitCommandResult {
+            repo: self.to_owned(),
+            success: true,
+            output: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            error: None,
+        })
     }
 
-    pub fn switch_to_primary_branch(&self, root: &Path) -> anyhow::Result<()> {
+    pub fn switch_to_primary_branch(&self, root: &Path) -> Result<GitCommandResult> {
         let branch = match &self.branch {
-            None => return Ok(()),
+            None => {
+                return Ok(GitCommandResult {
+                    repo: self.to_owned(),
+                    success: true,
+                    output: "No primary branch configured".to_string(),
+                    error: None,
+                })
+            }
             Some(b) => b,
         };
         let repo = Git2Repository::init(root.join(self.name()))?;
         let status = repo.statuses(Some(&mut StatusOptions::default()))?;
         if !status.is_empty() {
-            return Err(anyhow!(
-                "Repository is dirty, cannot switch to branch {}",
-                branch
-            ));
+            return Ok(GitCommandResult {
+                repo: self.to_owned(),
+                success: false,
+                output: String::new(),
+                error: Some(format!(
+                    "Repository is dirty, cannot switch to branch {}",
+                    branch
+                )),
+            });
         }
         repo.set_head(&format!("refs/heads/{}", branch))
             .with_context(|| format!("Cannot find branch {}", branch))?;
         repo.checkout_head(Some(CheckoutBuilder::default().safe().force()))
             .with_context(|| format!("Error checking out branch {}", branch))?;
-        Ok(())
+
+        Ok(GitCommandResult {
+            repo: self.to_owned(),
+            success: true,
+            output: format!("Switched to branch {}", branch),
+            error: None,
+        })
     }
 
-    pub fn clone(&self, root: &Path, progress_bar: &ProgressBar) -> anyhow::Result<()> {
-        let mut command = Command::new("git");
-
-        let child = command
-            .arg("clone")
-            .arg("--recurse-submodules")
-            .arg("--progress")
-            .arg(&self.url)
-            .arg(root.join(self.name()));
-
-        self.run_with_progress(child, progress_bar)
-            .with_context(|| {
-                format!("Error cloning repo into {} from {}", self.name(), &self.url)
-            })?;
-
-        Ok(())
+    pub fn clone(&self, root: &Path) -> Result<GitCommandResult> {
+        self.execute_cmd(
+            root,
+            "git",
+            &[
+                "clone".to_string(),
+                "--recurse-submodules".to_string(),
+                "--progress".to_string(),
+                self.url.clone(),
+                root.join(self.name()).to_string_lossy().into_owned(),
+            ],
+        )
     }
+
+    pub fn pull(&self, root: &Path) -> Result<GitCommandResult> {
+        match (&self.upstream, &self.branch) {
+            (Some(_), Some(branch)) => self.execute_cmd(
+                root,
+                "git",
+                &[
+                    "pull".to_string(),
+                    "upstream".to_string(),
+                    branch.to_string(),
+                ],
+            ),
+            _ => self.execute_cmd(root, "git", &["pull".to_string()]),
+        }
+    }
+
     pub fn name(&self) -> &String {
         &self.path
     }
-    pub fn get_path(&self, root: &Path) -> anyhow::Result<PathBuf> {
+
+    pub fn get_path(&self, root: &Path) -> Result<PathBuf> {
         let joined = root.join(self.name());
         joined
             .canonicalize()
             .with_context(|| format!("Cannot resolve {}", joined.display()))
     }
+
     pub fn exists(&self, root: &Path) -> bool {
         match self.get_path(root) {
             Ok(path) => {
@@ -194,5 +232,11 @@ impl Repository {
             }
             Err(_) => false,
         }
+    }
+}
+
+impl Identifiable for Repository {
+    fn name(&self) -> String {
+        self.name().to_owned()
     }
 }

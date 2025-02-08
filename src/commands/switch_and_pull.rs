@@ -1,32 +1,27 @@
-use super::map_repositories;
-use crate::lockfile::Lockfile;
-use anyhow::Context;
+use super::read_lock_file;
+use crate::{display::OutputFormat, processing::ParallelTaskProcessing};
 use std::path::Path;
 
-pub fn pull_all_repositories(workspace: &Path, threads: usize) -> anyhow::Result<()> {
-    let lockfile = Lockfile::new(workspace.join("workspace-lock.toml"));
-    let repositories = lockfile.read().with_context(|| "Error reading lockfile")?;
+pub fn pull_all_repositories(
+    workspace: &Path,
+    threads: usize,
+    output: OutputFormat,
+) -> anyhow::Result<()> {
+    let repositories = read_lock_file(workspace)?;
+    let display = output.create_display();
 
     println!(
         "Switching to the primary branch and pulling {} repositories",
         repositories.len()
     );
 
-    map_repositories(&repositories, threads, |r, progress_bar| {
-        r.switch_to_primary_branch(workspace)?;
-        let pull_args = match (&r.upstream, &r.branch) {
-            // This fucking sucks, but it's because my abstractions suck ass.
-            // I need to learn how to fix this.
-            (Some(_), Some(branch)) => vec![
-                "pull".to_string(),
-                "upstream".to_string(),
-                branch.to_string(),
-            ],
-            _ => vec!["pull".to_string()],
-        };
-        r.execute_cmd(workspace, progress_bar, "git", &pull_args)?;
-        Ok(())
-    })?;
+    // Run fetch on them
+    let task_name = "Update repositories".to_string();
+    let processor = ParallelTaskProcessing::new(task_name, repositories, threads, display);
+    processor.map_with_display(|repo, _display| {
+        repo.switch_to_primary_branch(workspace)?;
+        repo.pull(workspace)
+    });
 
     Ok(())
 }

@@ -3,6 +3,7 @@ use git_workspace::commands::{
     add_provider_to_config, archive, execute_cmd, fetch, list, lock, pull_all_repositories, update,
 };
 use git_workspace::config::ProviderSource;
+use git_workspace::display::OutputFormat;
 use git_workspace::utils::{ensure_workspace_dir_exists, expand_workspace_path};
 use std::path::PathBuf;
 
@@ -11,6 +12,8 @@ use std::path::PathBuf;
 struct Args {
     #[arg(short = 'w', long = "workspace", env = "GIT_WORKSPACE")]
     workspace: PathBuf,
+    #[arg(short = 'o', long = "output", value_enum, default_value = "simple")]
+    output: OutputFormat,
     #[command(subcommand)]
     command: Command,
 }
@@ -78,26 +81,29 @@ fn main() -> anyhow::Result<()> {
 fn handle_main(args: Args) -> anyhow::Result<()> {
     let workspace_path = expand_workspace_path(&args.workspace)?;
     let workspace_path = ensure_workspace_dir_exists(&workspace_path)?;
+    let output = args.output;
 
     // Run our sub command. Pretty self-explanatory.
     match args.command {
-        Command::List { full } => list(&workspace_path, full)?,
+        Command::List { full } => list(&workspace_path, full, output)?,
         Command::Update { threads } => {
-            lock(&workspace_path)?;
-            update(&workspace_path, threads)?
+            lock(&workspace_path, output)?;
+            update(&workspace_path, threads, output)?
         }
         Command::Lock {} => {
-            lock(&workspace_path)?;
+            lock(&workspace_path, output)?;
         }
-        Command::Archive { force } => archive(&workspace_path, force)?,
-        Command::Fetch { threads } => fetch(&workspace_path, threads)?,
+        Command::Archive { force } => archive(&workspace_path, force, output)?,
+        Command::Fetch { threads } => fetch(&workspace_path, threads, output)?,
         Command::Add { file, command } => add_provider_to_config(&workspace_path, command, &file)?,
         Command::Run {
             threads,
             command,
             args,
-        } => execute_cmd(&workspace_path, threads, command, args)?,
-        Command::SwitchAndPull { threads } => pull_all_repositories(&workspace_path, threads)?,
+        } => execute_cmd(&workspace_path, threads, output, command, args)?,
+        Command::SwitchAndPull { threads } => {
+            pull_all_repositories(&workspace_path, threads, output)?
+        }
     };
     Ok(())
 }

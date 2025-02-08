@@ -1,18 +1,17 @@
-use super::lock;
-use crate::lockfile::Lockfile;
+use super::get_all_repositories_to_archive;
+use super::{lock, read_lock_file};
+use crate::display::OutputFormat;
 use crate::utils;
 use anyhow::Context;
 use console::style;
 use std::path::{Path, PathBuf};
 
-use super::get_all_repositories_to_archive;
-
-pub fn archive(workspace: &Path, force: bool) -> anyhow::Result<()> {
+pub fn archive(workspace: &Path, force: bool, output: OutputFormat) -> anyhow::Result<()> {
     // Archive any repositories that have been deleted from the lockfile.
-    lock(workspace)?;
+    lock(workspace, output)?;
 
-    let lockfile = Lockfile::new(workspace.join("workspace-lock.toml"));
-    let repositories = lockfile.read().context("Error reading lockfile")?;
+    //
+    let repositories = read_lock_file(workspace)?;
     let repos_to_archive = get_all_repositories_to_archive(workspace, repositories)?;
 
     if !force {

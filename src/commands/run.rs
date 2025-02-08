@@ -1,36 +1,32 @@
-use super::map_repositories;
-use crate::lockfile::Lockfile;
-use crate::repository::Repository;
+use super::read_lock_file;
+use crate::display::OutputFormat;
+use crate::processing::ParallelTaskProcessing;
 use std::path::Path;
 
 /// Execute a command on all our repositories
 pub fn execute_cmd(
     workspace: &Path,
     threads: usize,
+    output: OutputFormat,
     cmd: String,
     args: Vec<String>,
 ) -> anyhow::Result<()> {
-    // Read the lockfile
-    let lockfile = Lockfile::new(workspace.join("workspace-lock.toml"));
-    let repositories = lockfile.read()?;
+    let repositories = read_lock_file(&workspace.join("workspace-lock.toml"))?;
+    let display = output.create_display();
 
-    // We only care about repositories that exist
-    let repos_to_fetch: Vec<Repository> = repositories
-        .iter()
-        .filter(|r| r.exists(workspace))
-        .cloned()
-        .collect();
-
+    // We only care about repositories that exist//
+    let task_name = "Run command".to_string();
+    let mut processor = ParallelTaskProcessing::new(task_name, repositories, threads, display);
+    processor.filter(|r| r.exists(workspace));
     println!(
         "Running {} {} on {} repositories",
         cmd,
         args.join(" "),
-        repos_to_fetch.len()
+        processor.len(),
     );
 
     // Run fetch on them
-    map_repositories(&repos_to_fetch, threads, |r, progress_bar| {
-        r.execute_cmd(workspace, progress_bar, &cmd, &args)
-    })?;
+    processor.map_with_display(|repo, _display| repo.execute_cmd(workspace, &cmd, &args));
+
     Ok(())
 }

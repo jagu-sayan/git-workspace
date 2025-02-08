@@ -1,3 +1,4 @@
+use crate::processing::Identifiable;
 use crate::providers::{
     create_exclude_regex_set, create_include_regex_set, Provider, APP_USER_AGENT,
 };
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 struct GiteaRepository {
     full_name: String,
     clone_url: String,
@@ -28,7 +29,7 @@ fn public_gitea_url() -> String {
     DEFAULT_GITEA_URL.to_string()
 }
 
-#[derive(Deserialize, Serialize, Debug, Eq, Ord, PartialEq, PartialOrd, clap::Parser)]
+#[derive(Deserialize, Serialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, clap::Parser)]
 #[serde(rename_all = "lowercase")]
 #[command(about = "Add a Gitea user or organization by name")]
 pub struct GiteaProvider {
@@ -80,6 +81,12 @@ impl fmt::Display for GiteaProvider {
             style(&self.path).green(),
             style(&self.env_var).green(),
         )
+    }
+}
+
+impl Identifiable for GiteaProvider {
+    fn name(&self) -> String {
+        "Gitea provider".to_string()
     }
 }
 
